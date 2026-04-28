@@ -1,4 +1,6 @@
 'use client';
+import RichTextEditor from '../../components/editor/RichTextEditor';
+import SeoPanel from '../../components/editor/SeoPanel';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -20,6 +22,14 @@ export default function AdminPage() {
   image_url: '',
   is_published: false,
   categories: ['General'] as string[],
+  meta_title: '',
+  meta_description: '',
+  focus_keyword: '',
+  custom_slug: '',
+  status: 'draft',
+  read_time: 1,
+  co_authors: [] as string[],
+  scheduled_at: '',
 });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -37,7 +47,13 @@ export default function AdminPage() {
   }, [router, loadPosts]);
 
  function resetForm() {
-  setForm({ title: '', excerpt: '', content: '', image_url: '', is_published: false, categories: ['General'] });
+  setForm({
+    title: '', excerpt: '', content: '', image_url: '',
+    is_published: false, categories: ['General'],
+    meta_title: '', meta_description: '', focus_keyword: '',
+    custom_slug: '', status: 'draft', read_time: 1,
+    co_authors: [], scheduled_at: '',
+  });
   setEditId(null);
   setMessage('');
 }
@@ -77,6 +93,14 @@ export default function AdminPage() {
     image_url: post.image_url,
     is_published: post.is_published,
     categories: Array.isArray(post.categories) ? post.categories : [post.category || 'General'],
+    meta_title: (post as any).meta_title || '',
+    meta_description: (post as any).meta_description || '',
+    focus_keyword: (post as any).focus_keyword || '',
+    custom_slug: (post as any).custom_slug || '',
+    status: (post as any).status || 'draft',
+    read_time: (post as any).read_time || 1,
+    co_authors: (post as any).co_authors || [],
+    scheduled_at: (post as any).scheduled_at || '',
   });
   setTab('new');
 }
@@ -233,154 +257,208 @@ export default function AdminPage() {
 
         {/* Post Form */}
         {tab === 'new' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 max-w-3xl shadow-sm">
-            <h2 className="text-xl font-bold text-[#0F172A] mb-6">
-              {editId ? '✏️ Edit Post' : '✨ Create New Post'}
-            </h2>
+  <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-            {message && (
-              <div className={`mb-5 text-sm rounded-xl px-4 py-3 border ${
-                message.includes('Error') || message.includes('error')
-                  ? 'bg-red-50 text-red-700 border-red-200'
-                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              }`}>
-                {message}
-              </div>
-            )}
+    {/* Main editor — 2/3 width */}
+    <div className="xl:col-span-2 space-y-5">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[#0F172A] mb-5">
+          {editId ? '✏️ Edit Post' : '✨ Create New Post'}
+        </h2>
 
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Title *</label>
-                <input
-                  className={inputCls}
-                  placeholder="Breaking: Something big happened..."
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                />
-              </div>
-
-              <div>
-  <label className="block text-sm font-medium text-slate-700 mb-3">
-    Categories <span className="text-slate-400 font-normal">(select all that apply)</span>
-  </label>
-  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-    {['General', 'Latest', 'Tech', 'Business', 'Entertainment', 'Sports'].map(cat => {
-      const checked = form.categories.includes(cat);
-      return (
-        <label
-          key={cat}
-          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border cursor-pointer transition-all ${
-            checked
-              ? 'bg-crimson-50 border-[#E11D48] text-[#E11D48]'
-              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-          }`}
-        >
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={() => {
-              setForm(f => ({
-                ...f,
-                categories: checked
-                  ? f.categories.filter(c => c !== cat)
-                  : [...f.categories, cat],
-              }));
-            }}
-            className="hidden"
-          />
-          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
-            checked ? 'bg-[#E11D48] border-[#E11D48]' : 'border-slate-300'
+        {message && (
+          <div className={`mb-5 text-sm rounded-xl px-4 py-3 border ${
+            message.includes('Error') || message.includes('error')
+              ? 'bg-red-50 text-red-700 border-red-200'
+              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
           }`}>
-            {checked && (
-              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            )}
-          </div>
-          <span className="text-sm font-medium">{cat}</span>
-        </label>
-      );
-    })}
-  </div>
-</div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Excerpt</label>
-                <input
-                  className={inputCls}
-                  placeholder="A short summary shown in the feed..."
-                  value={form.excerpt}
-                  onChange={e => setForm(f => ({ ...f, excerpt: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Content</label>
-                <textarea
-                  className={`${inputCls} resize-none`}
-                  rows={12}
-                  placeholder="Write your full article here..."
-                  value={form.content}
-                  onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Image URL</label>
-                <input
-                  className={inputCls}
-                  placeholder="https://images.unsplash.com/photo-..."
-                  value={form.image_url}
-                  onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))}
-                />
-                {form.image_url && (
-                  <div className="mt-2 rounded-xl overflow-hidden h-40 bg-slate-100">
-                    <img
-                      src={form.image_url}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                      onError={e => (e.currentTarget.style.display = 'none')}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <div
-                    onClick={() => setForm(f => ({ ...f, is_published: !f.is_published }))}
-                    className={`w-11 h-6 rounded-full transition-all relative cursor-pointer ${
-                      form.is_published ? 'bg-[#E11D48]' : 'bg-slate-300'
-                    }`}
-                  >
-                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${
-                      form.is_published ? 'left-5' : 'left-0.5'
-                    }`} />
-                  </div>
-                  <span className="text-sm text-slate-600 font-medium">
-                    {form.is_published ? 'Publish immediately' : 'Save as draft'}
-                  </span>
-                </label>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setTab('posts'); resetForm(); }}
-                    className="px-5 py-2.5 text-sm text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-all border border-slate-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || !form.title}
-                    className="px-6 py-2.5 text-sm font-semibold bg-[#E11D48] hover:bg-[#be123c] disabled:opacity-50 text-white rounded-xl transition-all shadow-sm"
-                  >
-                    {saving ? 'Saving...' : editId ? 'Update Post' : 'Publish Post'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            {message}
           </div>
         )}
+
+        {/* Title */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Title *</label>
+          <input
+            className={inputCls}
+            placeholder="Breaking: Something big happened..."
+            value={form.title}
+            onChange={e => setForm(f => ({
+              ...f,
+              title: e.target.value,
+              custom_slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            }))}
+          />
+        </div>
+
+        {/* Excerpt */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Excerpt</label>
+          <input
+            className={inputCls}
+            placeholder="A short summary shown in the feed..."
+            value={form.excerpt}
+            onChange={e => setForm(f => ({ ...f, excerpt: e.target.value }))}
+          />
+        </div>
+
+        {/* Rich Text Editor */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Content</label>
+          <RichTextEditor
+            content={form.content}
+            onChange={html => setForm(f => ({ ...f, content: html }))}
+            onReadTime={mins => setForm(f => ({ ...f, read_time: mins }))}
+            postId={editId ?? undefined}
+          />
+        </div>
+
+        {/* Image URL */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Cover Image URL</label>
+          <input
+            className={inputCls}
+            placeholder="https://images.unsplash.com/..."
+            value={form.image_url}
+            onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))}
+          />
+          {form.image_url && (
+            <div className="mt-2 rounded-xl overflow-hidden h-40 bg-slate-100">
+              <img
+                src={form.image_url}
+                alt="Preview"
+                className="w-full h-full object-cover"
+                onError={e => (e.currentTarget.style.display = 'none')}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* Right sidebar — 1/3 width */}
+    <div className="space-y-5">
+
+      {/* Publish panel */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h3 className="font-semibold text-slate-800 mb-4">Publish Settings</h3>
+
+        {/* Status */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
+          <select
+            className={inputCls}
+            value={form.status}
+            onChange={e => setForm(f => ({
+              ...f,
+              status: e.target.value,
+              is_published: e.target.value === 'published',
+            }))}
+          >
+            <option value="draft">Draft</option>
+            <option value="pending">Pending Review</option>
+            <option value="published">Published</option>
+            <option value="scheduled">Scheduled</option>
+          </select>
+        </div>
+
+        {/* Schedule */}
+        {form.status === 'scheduled' && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Schedule Date & Time</label>
+            <input
+              type="datetime-local"
+              className={inputCls}
+              value={form.scheduled_at}
+              onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))}
+            />
+          </div>
+        )}
+
+        {/* Read time */}
+        <div className="mb-4 flex items-center justify-between py-2 border-t border-slate-100">
+          <span className="text-sm text-slate-500">Estimated read time</span>
+          <span className="text-sm font-semibold text-slate-800">{form.read_time} min</span>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-2 border-t border-slate-100">
+          <button
+            onClick={() => { setTab('posts'); resetForm(); }}
+            className="flex-1 py-2.5 text-sm text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-all border border-slate-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !form.title}
+            className="flex-1 py-2.5 text-sm font-semibold bg-[#E11D48] hover:bg-[#be123c] disabled:opacity-50 text-white rounded-xl transition-all"
+          >
+            {saving ? 'Saving...' : editId ? 'Update' : 'Publish'}
+          </button>
+        </div>
+      </div>
+
+      {/* Categories */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h3 className="font-semibold text-slate-800 mb-4">Categories</h3>
+        <div className="grid grid-cols-2 gap-2">
+          {['General', 'Latest', 'Tech', 'Business', 'Entertainment', 'Sports'].map(cat => {
+            const checked = form.categories.includes(cat);
+            return (
+              <label
+                key={cat}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-sm ${
+                  checked
+                    ? 'bg-crimson-50 border-[#E11D48] text-[#E11D48]'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => setForm(f => ({
+                    ...f,
+                    categories: checked
+                      ? f.categories.filter(c => c !== cat)
+                      : [...f.categories, cat],
+                  }))}
+                  className="hidden"
+                />
+                <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                  checked ? 'bg-[#E11D48] border-[#E11D48]' : 'border-slate-300'
+                }`}>
+                  {checked && (
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                      <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                {cat}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* SEO Panel */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h3 className="font-semibold text-slate-800 mb-4">🔍 SEO & Metadata</h3>
+        <SeoPanel
+          title={form.title}
+          metaTitle={form.meta_title}
+          metaDescription={form.meta_description}
+          focusKeyword={form.focus_keyword}
+          customSlug={form.custom_slug}
+          content={form.content}
+          excerpt={form.excerpt}
+          onChange={(field, value) => setForm(f => ({ ...f, [field]: value }))}
+        />
+      </div>
+
+    </div>
+  </div>
+)}
       </div>
     </div>
   );

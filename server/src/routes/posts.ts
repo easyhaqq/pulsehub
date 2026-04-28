@@ -134,6 +134,57 @@ router.get('/search', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/posts/:id/autosave
+router.post('/:id/autosave', requireAuth, async (req: AuthRequest, res: Response) => {
+  const { content } = req.body as { content: string };
+  try {
+    await pool.query(
+      `INSERT INTO post_drafts (post_id, content) VALUES ($1, $2)`,
+      [req.params.id, content]
+    );
+    // Keep only last 10 versions
+    await pool.query(`
+      DELETE FROM post_drafts WHERE post_id = $1
+      AND id NOT IN (
+        SELECT id FROM post_drafts WHERE post_id = $1
+        ORDER BY saved_at DESC LIMIT 10
+      )
+    `, [req.params.id]);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Autosave failed' });
+  }
+});
+
+// GET /api/posts/:id/versions
+router.get('/:id/versions', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, saved_at FROM post_drafts WHERE post_id = $1 ORDER BY saved_at DESC`,
+      [req.params.id]
+    );
+    return res.json(rows);
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/posts/search/internal?q= (internal linking)
+router.get('/search/internal', requireAuth, async (req: Request, res: Response) => {
+  const q = (req.query.q as string || '').trim();
+  if (!q) return res.json([]);
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, title, slug FROM posts
+      WHERE title ILIKE $1 AND is_published = true
+      LIMIT 8
+    `, [`%${q}%`]);
+    return res.json(rows);
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/posts/:slug — single post + increment view
 router.get('/:slug', async (req: Request, res: Response) => {
   try {
@@ -199,13 +250,16 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
 
 // PATCH /api/posts/:id — update
 router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { title, excerpt, content, image_url, is_published, categories } = req.body as {
-    title?: string;
-    excerpt?: string;
-    content?: string;
-    image_url?: string;
-    is_published?: boolean;
-    categories?: string[];
+  const {
+    title, excerpt, content, image_url, is_published, categories,
+    meta_description, meta_title, focus_keyword, custom_slug,
+    scheduled_at, status, read_time, co_authors
+  } = req.body as {
+    title?: string; excerpt?: string; content?: string;
+    image_url?: string; is_published?: boolean; categories?: string[];
+    meta_description?: string; meta_title?: string; focus_keyword?: string;
+    custom_slug?: string; scheduled_at?: string; status?: string;
+    read_time?: number; co_authors?: string[];
   };
 
   const primaryCategory = categories && categories.length > 0 ? categories[0] : undefined;
@@ -213,28 +267,32 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { rows } = await pool.query(`
       UPDATE posts SET
-        title        = COALESCE($1, title),
-        excerpt      = COALESCE($2, excerpt),
-        content      = COALESCE($3, content),
-        image_url    = COALESCE($4, image_url),
-        is_published = COALESCE($5, is_published),
-        category     = COALESCE($6, category),
-        categories   = COALESCE($7, categories),
-        updated_at   = NOW()
-      WHERE id = $8
+        title             = COALESCE($1, title),
+        excerpt           = COALESCE($2, excerpt),
+        content           = COALESCE($3, content),
+        image_url         = COALESCE($4, image_url),
+        is_published      = COALESCE($5, is_published),
+        category          = COALESCE($6, category),
+        categories        = COALESCE($7, categories),
+        meta_description  = COALESCE($8, meta_description),
+        meta_title        = COALESCE($9, meta_title),
+        focus_keyword     = COALESCE($10, focus_keyword),
+        custom_slug       = COALESCE($11, custom_slug),
+        scheduled_at      = COALESCE($12::timestamptz, scheduled_at),
+        status            = COALESCE($13, status),
+        read_time         = COALESCE($14, read_time),
+        co_authors        = COALESCE($15, co_authors),
+        updated_at        = NOW()
+      WHERE id = $16
       RETURNING *
     `, [
-      title,
-      excerpt,
-      content,
-      image_url,
-      is_published,
-      primaryCategory,
-      categories,
-      req.params.id,
+      title, excerpt, content, image_url, is_published,
+      primaryCategory, categories, meta_description, meta_title,
+      focus_keyword, custom_slug, scheduled_at, status, read_time,
+      co_authors, req.params.id
     ]);
 
-    if (!rows[0]) return res.status(404).json({ error: 'Post not found' });
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
     return res.json(rows[0]);
   } catch (err) {
     console.error(err);
