@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: #F8FAFC;
+  color: #0F172A;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .nav-link {
+    @apply relative text-sm font-medium text-slate-600 hover:text-[#E11D48] transition-colors duration-200;
+  }
+  .nav-link::after {
+    content: '';
+    @apply absolute -bottom-1 left-0 w-0 h-0.5 bg-[#E11D48] transition-all duration-300;
+  }
+  .nav-link:hover::after { @apply w-full; }
+
+  .btn-primary {
+    @apply bg-[#E11D48] hover:bg-[#be123c] text-white text-sm font-semibold px-5 py-2.5 rounded-full transition-all duration-200 shadow-sm hover:shadow-md;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
+  }
+
+  .category-badge {
+    @apply inline-block text-xs font-bold uppercase tracking-widest text-[#E11D48] bg-crimson-50 px-2.5 py-1 rounded-full;
+  }
+
+  .prose-article h1 { @apply text-4xl font-extrabold text-[#0F172A] leading-tight mb-4; }
+  .prose-article h2 { @apply text-2xl font-bold text-[#0F172A] mt-10 mb-4; }
+  .prose-article h3 { @apply text-xl font-semibold text-[#0F172A] mt-8 mb-3; }
+  .prose-article p  { @apply text-lg text-slate-600 leading-relaxed mb-6; }
+  .prose-article ul { @apply list-disc pl-6 mb-6 text-slate-600 space-y-2; }
+  .prose-article blockquote {
+    @apply border-l-4 border-[#E11D48] pl-6 italic text-slate-500 my-8 text-xl;
+  }
+}
