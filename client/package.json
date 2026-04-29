@@ -7,6 +7,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.7.6",
     "@tiptap/core": "^3.22.5",
     "@tiptap/extension-bubble-menu": "^3.22.5",
     "@tiptap/extension-character-count": "^3.22.5",

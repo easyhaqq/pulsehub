@@ -67,7 +67,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/posts/category/:category — matches ANY in categories array
+// GET /api/posts/category/:category
 router.get('/category/:category', async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 12;
   try {
@@ -90,12 +90,14 @@ router.get('/category/:category', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/posts/all — admin: all posts
+// GET /api/posts/all — admin
 router.get('/all', requireAuth, async (_req: AuthRequest, res: Response) => {
   try {
     const { rows } = await pool.query(`
       SELECT p.id, p.title, p.slug, p.excerpt, p.image_url, p.category,
              p.categories, p.is_published, p.view_count, p.created_at,
+             p.status, p.read_time, p.meta_title, p.meta_description,
+             p.focus_keyword, p.custom_slug, p.scheduled_at, p.co_authors,
              u.username AS author
       FROM posts p
       LEFT JOIN users u ON p.author_id = u.id
@@ -107,11 +109,10 @@ router.get('/all', requireAuth, async (_req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/posts/search?q=...
+// GET /api/posts/search?q= — public search
 router.get('/search', async (req: Request, res: Response) => {
   const q = (req.query.q as string || '').trim();
   if (!q) return res.json({ posts: [] });
-
   try {
     const { rows } = await pool.query(`
       SELECT p.id, p.title, p.slug, p.excerpt, p.image_url, p.category,
@@ -134,42 +135,7 @@ router.get('/search', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/posts/:id/autosave
-router.post('/:id/autosave', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { content } = req.body as { content: string };
-  try {
-    await pool.query(
-      `INSERT INTO post_drafts (post_id, content) VALUES ($1, $2)`,
-      [req.params.id, content]
-    );
-    // Keep only last 10 versions
-    await pool.query(`
-      DELETE FROM post_drafts WHERE post_id = $1
-      AND id NOT IN (
-        SELECT id FROM post_drafts WHERE post_id = $1
-        ORDER BY saved_at DESC LIMIT 10
-      )
-    `, [req.params.id]);
-    return res.json({ success: true });
-  } catch (err) {
-    return res.status(500).json({ error: 'Autosave failed' });
-  }
-});
-
-// GET /api/posts/:id/versions
-router.get('/:id/versions', requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT id, saved_at FROM post_drafts WHERE post_id = $1 ORDER BY saved_at DESC`,
-      [req.params.id]
-    );
-    return res.json(rows);
-  } catch (err) {
-    return res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// GET /api/posts/search/internal?q= (internal linking)
+// GET /api/posts/search/internal?q= — admin internal linking
 router.get('/search/internal', requireAuth, async (req: Request, res: Response) => {
   const q = (req.query.q as string || '').trim();
   if (!q) return res.json([]);
@@ -207,15 +173,52 @@ router.get('/:slug', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/posts/:id/autosave
+router.post('/:id/autosave', requireAuth, async (req: AuthRequest, res: Response) => {
+  const { content } = req.body as { content: string };
+  try {
+    await pool.query(
+      `INSERT INTO post_drafts (post_id, content) VALUES ($1, $2)`,
+      [req.params.id, content]
+    );
+    await pool.query(`
+      DELETE FROM post_drafts WHERE post_id = $1
+      AND id NOT IN (
+        SELECT id FROM post_drafts WHERE post_id = $1
+        ORDER BY saved_at DESC LIMIT 10
+      )
+    `, [req.params.id]);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Autosave failed' });
+  }
+});
+
+// GET /api/posts/:id/versions
+router.get('/:id/versions', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, saved_at FROM post_drafts WHERE post_id = $1 ORDER BY saved_at DESC`,
+      [req.params.id]
+    );
+    return res.json(rows);
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/posts — create
 router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { title, excerpt, content, image_url, is_published, categories } = req.body as {
-    title: string;
-    excerpt?: string;
-    content?: string;
-    image_url?: string;
-    is_published?: boolean;
-    categories?: string[];
+  const {
+    title, excerpt, content, image_url, is_published,
+    categories, meta_description, meta_title, focus_keyword,
+    custom_slug, scheduled_at, status, read_time, co_authors
+  } = req.body as {
+    title: string; excerpt?: string; content?: string;
+    image_url?: string; is_published?: boolean; categories?: string[];
+    meta_description?: string; meta_title?: string; focus_keyword?: string;
+    custom_slug?: string; scheduled_at?: string; status?: string;
+    read_time?: number; co_authors?: string[];
   };
 
   if (!title) return res.status(400).json({ error: 'Title required' });
@@ -223,22 +226,25 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   const slug = slugify(title) + '-' + Date.now().toString(36);
   const resolvedCategories = categories && categories.length > 0 ? categories : ['General'];
   const primaryCategory = resolvedCategories[0];
+  // Fix: convert empty string to null for timestamp
+  const resolvedScheduledAt = scheduled_at && scheduled_at.trim() !== '' ? scheduled_at : null;
 
   try {
     const { rows } = await pool.query(`
-      INSERT INTO posts (title, slug, excerpt, content, image_url, author_id, is_published, category, categories)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO posts (
+        title, slug, excerpt, content, image_url, author_id,
+        is_published, category, categories, meta_description,
+        meta_title, focus_keyword, custom_slug, scheduled_at,
+        status, read_time, co_authors
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       RETURNING *
     `, [
-      title,
-      slug,
-      excerpt || '',
-      content || '',
-      image_url || '',
-      req.userId,
-      is_published ?? false,
-      primaryCategory,
-      resolvedCategories,
+      title, slug, excerpt || '', content || '', image_url || '',
+      req.userId, is_published ?? false, primaryCategory,
+      resolvedCategories, meta_description || null, meta_title || null,
+      focus_keyword || null, custom_slug || null, resolvedScheduledAt,
+      status || 'draft', read_time || 0, co_authors || []
     ]);
 
     return res.status(201).json(rows[0]);
@@ -251,9 +257,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
 // PATCH /api/posts/:id — update
 router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   const {
-    title, excerpt, content, image_url, is_published, categories,
-    meta_description, meta_title, focus_keyword, custom_slug,
-    scheduled_at, status, read_time, co_authors
+    title, excerpt, content, image_url, is_published,
+    categories, meta_description, meta_title, focus_keyword,
+    custom_slug, scheduled_at, status, read_time, co_authors
   } = req.body as {
     title?: string; excerpt?: string; content?: string;
     image_url?: string; is_published?: boolean; categories?: string[];
@@ -263,36 +269,39 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   };
 
   const primaryCategory = categories && categories.length > 0 ? categories[0] : undefined;
+  // Fix: convert empty string to null for timestamp
+  const resolvedScheduledAt = scheduled_at && scheduled_at.trim() !== '' ? scheduled_at : null;
 
   try {
     const { rows } = await pool.query(`
       UPDATE posts SET
-        title             = COALESCE($1, title),
-        excerpt           = COALESCE($2, excerpt),
-        content           = COALESCE($3, content),
-        image_url         = COALESCE($4, image_url),
-        is_published      = COALESCE($5, is_published),
-        category          = COALESCE($6, category),
-        categories        = COALESCE($7, categories),
-        meta_description  = COALESCE($8, meta_description),
-        meta_title        = COALESCE($9, meta_title),
-        focus_keyword     = COALESCE($10, focus_keyword),
-        custom_slug       = COALESCE($11, custom_slug),
-        scheduled_at      = COALESCE($12::timestamptz, scheduled_at),
-        status            = COALESCE($13, status),
-        read_time         = COALESCE($14, read_time),
-        co_authors        = COALESCE($15, co_authors),
-        updated_at        = NOW()
+        title            = COALESCE($1, title),
+        excerpt          = COALESCE($2, excerpt),
+        content          = COALESCE($3, content),
+        image_url        = COALESCE($4, image_url),
+        is_published     = COALESCE($5, is_published),
+        category         = COALESCE($6, category),
+        categories       = COALESCE($7, categories),
+        meta_description = COALESCE($8, meta_description),
+        meta_title       = COALESCE($9, meta_title),
+        focus_keyword    = COALESCE($10, focus_keyword),
+        custom_slug      = COALESCE($11, custom_slug),
+        scheduled_at     = $12,
+        status           = COALESCE($13, status),
+        read_time        = COALESCE($14, read_time),
+        co_authors       = COALESCE($15, co_authors),
+        updated_at       = NOW()
       WHERE id = $16
       RETURNING *
     `, [
       title, excerpt, content, image_url, is_published,
-      primaryCategory, categories, meta_description, meta_title,
-      focus_keyword, custom_slug, scheduled_at, status, read_time,
-      co_authors, req.params.id
+      primaryCategory, categories, meta_description || null,
+      meta_title || null, focus_keyword || null, custom_slug || null,
+      resolvedScheduledAt, status, read_time, co_authors,
+      req.params.id
     ]);
 
-    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    if (!rows[0]) return res.status(404).json({ error: 'Post not found' });
     return res.json(rows[0]);
   } catch (err) {
     console.error(err);

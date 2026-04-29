@@ -1,25 +1,30 @@
 'use client';
 import { useEditor, EditorContent } from '@tiptap/react';
-import { BubbleMenu } from '@tiptap/react/menus';
-import { StarterKit } from '@tiptap/starter-kit';
-import { Image } from '@tiptap/extension-image';
-import { Link } from '@tiptap/extension-link';
-import { Placeholder } from '@tiptap/extension-placeholder';
-import { TextAlign } from '@tiptap/extension-text-align';
-import { Underline } from '@tiptap/extension-underline';
-import { Highlight } from '@tiptap/extension-highlight';
-import { Youtube } from '@tiptap/extension-youtube';
+
+// ✅ Tiptap v3 import path
+import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus'; 
+
+import StarterKit from '@tiptap/starter-kit';
+import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
+
+import ImageExtension from '@tiptap/extension-image';
+import LinkExtension from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+import TextAlign from '@tiptap/extension-text-align';
+import UnderlineExtension from '@tiptap/extension-underline';
+import Highlight from '@tiptap/extension-highlight';
+import Youtube from '@tiptap/extension-youtube';
 import { Table } from '@tiptap/extension-table';
-import { TableRow } from '@tiptap/extension-table-row';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
-import { CharacterCount } from '@tiptap/extension-character-count';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import CharacterCount from '@tiptap/extension-character-count';
 import { useEffect, useCallback, useState } from 'react';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
-  Heading1, Heading2, Heading3, Heading4,
+  Heading1, Heading2, Heading3,
   List, ListOrdered, Quote, Minus, Link as LinkIcon,
-  Image as ImageIcon, MonitorPlay as YoutubeIcon, Table as TableIcon,
+  Image as ImageIcon, Video, Table as TableIcon,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Highlighter, Undo, Redo, Code, Eye, Smartphone
 } from 'lucide-react';
@@ -75,19 +80,17 @@ export default function RichTextEditor({
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4] },
       }),
-      Image.configure({ inline: false, allowBase64: true }),
-      Link.configure({ openOnClick: false, autolink: true }),
+      // ✅ Required in v3: Register the BubbleMenu logic extension
+      BubbleMenuExtension.configure({
+        pluginKey: 'bubbleMenu',
+      }),
+      ImageExtension.configure({ inline: false, allowBase64: true }),
+      LinkExtension.configure({ openOnClick: false, autolink: true }),
       Placeholder.configure({ placeholder: 'Start writing your story...' }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Underline,
+      UnderlineExtension,
       Highlight.configure({ multicolor: true }),
-      Youtube.configure({ 
-        width: 640, 
-        height: 480,
-        HTMLAttributes: {
-          class: 'w-full',
-        }
-      }),
+      Youtube.configure({ width: 640, height: 480 }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -132,14 +135,14 @@ export default function RichTextEditor({
         credentials: 'include',
       });
       const data = await res.json();
-      setInternalResults(data);
+      setInternalResults(Array.isArray(data) ? data : []);
     }, 300);
     return () => clearTimeout(timer);
   }, [internalSearch]);
 
   function insertLink() {
     if (!linkUrl || !editor) return;
-    editor.chain().focus().setLink({ href: linkUrl }).run();
+    editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
     setLinkUrl('');
     setShowLinkInput(false);
   }
@@ -160,9 +163,12 @@ export default function RichTextEditor({
 
   function insertInternalLink(slug: string, title: string) {
     if (!editor) return;
-    editor.chain().focus().setLink({ href: `/news/${slug}` }).insertContent(title).run();
+    editor.chain().focus()
+      .insertContent(`<a href="/news/${slug}">${title}</a>`)
+      .run();
     setShowInternalSearch(false);
     setInternalSearch('');
+    setInternalResults([]);
   }
 
   if (!editor) return null;
@@ -266,19 +272,19 @@ export default function RichTextEditor({
             <ImageIcon size={15} />
           </ToolbarButton>
           <ToolbarButton title="Embed YouTube" onClick={() => setShowYoutubeInput(!showYoutubeInput)}>
-            <YoutubeIcon size={15} />
+            <Video size={15} />
           </ToolbarButton>
           <ToolbarButton title="Insert Table" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
             <TableIcon size={15} />
           </ToolbarButton>
         </div>
 
-        {/* Internal link search */}
-        <ToolbarButton title="Internal Link" onClick={() => setShowInternalSearch(!showInternalSearch)}>
+        {/* Internal link */}
+        <ToolbarButton title="Search Internal Articles" onClick={() => setShowInternalSearch(!showInternalSearch)}>
           <span className="text-xs font-bold">🔗</span>
         </ToolbarButton>
 
-        {/* Preview toggle */}
+        {/* Preview */}
         <div className="flex items-center gap-0.5 ml-auto">
           <ToolbarButton title="Desktop Preview" onClick={() => setPreview(preview === 'desktop' ? null : 'desktop')} active={preview === 'desktop'}>
             <Eye size={15} />
@@ -302,9 +308,9 @@ export default function RichTextEditor({
             placeholder="https://example.com"
             className="flex-1 bg-transparent text-sm outline-none text-slate-800"
           />
-          <button onClick={insertLink} className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg">Insert</button>
-          <button onClick={() => editor.chain().focus().unsetLink().run()} className="text-xs text-red-500">Remove</button>
-          <button onClick={() => setShowLinkInput(false)} className="text-xs text-slate-400">✕</button>
+          <button type="button" onClick={insertLink} className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg">Insert</button>
+          <button type="button" onClick={() => editor.chain().focus().unsetLink().run()} className="text-xs text-red-500">Remove</button>
+          <button type="button" onClick={() => setShowLinkInput(false)} className="text-xs text-slate-400">✕</button>
         </div>
       )}
 
@@ -320,14 +326,14 @@ export default function RichTextEditor({
             placeholder="https://images.unsplash.com/..."
             className="flex-1 bg-transparent text-sm outline-none text-slate-800"
           />
-          <button onClick={insertImage} className="text-xs bg-green-600 text-white px-3 py-1 rounded-lg">Insert</button>
-          <button onClick={() => setShowImageInput(false)} className="text-xs text-slate-400">✕</button>
+          <button type="button" onClick={insertImage} className="text-xs bg-green-600 text-white px-3 py-1 rounded-lg">Insert</button>
+          <button type="button" onClick={() => setShowImageInput(false)} className="text-xs text-slate-400">✕</button>
         </div>
       )}
 
       {showYoutubeInput && (
         <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border-b border-red-100">
-          <YoutubeIcon size={14} className="text-red-500 flex-shrink-0" />
+          <Video size={14} className="text-red-500 flex-shrink-0" />
           <input
             autoFocus
             type="url"
@@ -337,8 +343,8 @@ export default function RichTextEditor({
             placeholder="https://youtube.com/watch?v=..."
             className="flex-1 bg-transparent text-sm outline-none text-slate-800"
           />
-          <button onClick={insertYoutube} className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg">Embed</button>
-          <button onClick={() => setShowYoutubeInput(false)} className="text-xs text-slate-400">✕</button>
+          <button type="button" onClick={insertYoutube} className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg">Embed</button>
+          <button type="button" onClick={() => setShowYoutubeInput(false)} className="text-xs text-slate-400">✕</button>
         </div>
       )}
 
@@ -346,7 +352,7 @@ export default function RichTextEditor({
         <div className="px-3 py-2 bg-purple-50 border-b border-purple-100">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-semibold text-purple-700">Search PulseHub articles to link:</span>
-            <button onClick={() => setShowInternalSearch(false)} className="text-xs text-slate-400 ml-auto">✕</button>
+            <button type="button" onClick={() => { setShowInternalSearch(false); setInternalResults([]); }} className="text-xs text-slate-400 ml-auto">✕</button>
           </div>
           <input
             autoFocus
@@ -360,6 +366,7 @@ export default function RichTextEditor({
             <div className="mt-1 bg-white rounded-lg border border-purple-200 overflow-hidden">
               {internalResults.map(r => (
                 <button
+                  type="button"
                   key={r.id}
                   onClick={() => insertInternalLink(r.slug, r.title)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-purple-50 border-b border-slate-100 last:border-0"
@@ -374,52 +381,63 @@ export default function RichTextEditor({
 
       {/* Editor / Preview */}
       {preview ? (
-        <div className={`p-6 ${preview === 'mobile' ? 'max-w-sm mx-auto' : ''}`}>
+        <div className={`p-6 min-h-64 ${preview === 'mobile' ? 'max-w-sm mx-auto' : ''}`}>
           <div className="text-xs text-center text-slate-400 mb-3 uppercase tracking-wider">
             {preview === 'mobile' ? '📱 Mobile Preview' : '🖥 Desktop Preview'}
           </div>
           <div
-            className="prose-article"
+            className="tiptap prose-article"
             dangerouslySetInnerHTML={{ __html: editor.getHTML() }}
           />
         </div>
       ) : (
         <>
-          {editor && (
-            <BubbleMenu editor={editor}>
-              <div className="flex items-center gap-1 bg-[#0F172A] rounded-lg px-2 py-1.5 shadow-xl">
-                <button onClick={() => editor.chain().focus().toggleBold().run()}
-                  className={`p-1 rounded text-white ${editor.isActive('bold') ? 'bg-white/20' : ''}`}>
-                  <Bold size={13} />
-                </button>
-                <button onClick={() => editor.chain().focus().toggleItalic().run()}
-                  className={`p-1 rounded text-white ${editor.isActive('italic') ? 'bg-white/20' : ''}`}>
-                  <Italic size={13} />
-                </button>
-                <button onClick={() => setShowLinkInput(true)}
-                  className={`p-1 rounded text-white ${editor.isActive('link') ? 'bg-white/20' : ''}`}>
-                  <LinkIcon size={13} />
-                </button>
-                <button onClick={() => editor.chain().focus().toggleHighlight().run()}
-                  className={`p-1 rounded text-white ${editor.isActive('highlight') ? 'bg-white/20' : ''}`}>
-                  <Highlighter size={13} />
-                </button>
-              </div>
-            </BubbleMenu>
-          )}
+          {/* ✅ Tiptap v3 BubbleMenu updates */}
+          <BubbleMenu editor={editor} updateDelay={100}>
+            <div className="flex items-center gap-1 bg-[#0F172A] rounded-lg px-2 py-1.5 shadow-xl">
+              <button 
+                type="button" 
+                onClick={() => editor.chain().focus().toggleBold().run()}
+                className={`p-1 rounded text-white ${editor.isActive('bold') ? 'bg-white/20' : ''}`}
+              >
+                <Bold size={13} />
+              </button>
+              <button 
+                type="button" 
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+                className={`p-1 rounded text-white ${editor.isActive('italic') ? 'bg-white/20' : ''}`}
+              >
+                <Italic size={13} />
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setShowLinkInput(true)}
+                className={`p-1 rounded text-white ${editor.isActive('link') ? 'bg-white/20' : ''}`}
+              >
+                <LinkIcon size={13} />
+              </button>
+              <button 
+                type="button" 
+                onClick={() => editor.chain().focus().toggleHighlight().run()}
+                className={`p-1 rounded text-white ${editor.isActive('highlight') ? 'bg-white/20' : ''}`}
+              >
+                <Highlighter size={13} />
+              </button>
+            </div>
+          </BubbleMenu>
           <EditorContent
             editor={editor}
-            className="min-h-[400px] px-6 py-4 prose-article focus-within:outline-none"
+            className="min-h-96 px-6 py-4 focus-within:outline-none"
           />
         </>
       )}
 
-      {/* Footer bar */}
+      {/* Footer */}
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 flex items-center justify-between text-xs text-slate-400">
         <div className="flex items-center gap-4">
           <span>{wordCount} words</span>
           <span>{readTime} min read</span>
-          <span>{editor.storage.characterCount?.characters() ?? 0} characters</span>
+          <span>{editor.storage.characterCount?.characters() ?? 0} chars</span>
         </div>
         {autoSaveStatus && <span className="text-emerald-600">{autoSaveStatus}</span>}
       </div>
